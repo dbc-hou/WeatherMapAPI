@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <!--    meta includes setup for media queries-->
+    <meta charset="UTF-8" name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>Weathermap Project</title>
+
+    <!--    bootstrap first-->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/css/bootstrap.min.css" integrity="sha384-TX8t27EcRE3e/ihU7zmQxVncDAy5uIKz4rEkgIXeMed4M0jlfIDPvg6uqKI2xXr2" crossorigin="anonymous">
+    <link href='https://api.mapbox.com/mapbox-gl-js/v2.7.0/mapbox-gl.css'
+          rel='stylesheet' />
+    <link rel="stylesheet"
+          href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v4.7.2/mapbox-gl-geocoder.css"
+          type="text/css">
+    <link rel="shortcut icon" href="img/favicon.ico">
+    <!-- YOUR EXTERNAL AND EMBEDDED STYLESHEETS GO HERE -->
+    <style>
+        body {
+            background-color: orange;
+        }
+        h1 {
+            font-family: "Montserrat", sans-serif;
+            font-size: 2em;
+            font-weight: bold;
+        }
+
+        h4 {
+            font-family: "Montserrat", sans-serif;
+            font-size: 1em;
+            font-weight: bold;
+        }
+
+        hr {
+            margin-bottom: 0;
+            margin-top: 0.2em;
+        }
+        p {
+            font-size: smaller;
+            margin-bottom: 0;
+        }
+
+        #map {
+            width: 80%;
+            height: 350px;
+            display: flex;
+            justify-content: center;
+            border: 3px solid red;
+        }
+
+    </style>
+</head>
+<body>
+<!--html body goes here-->
+<div class="container-fluid d-flex flex-column align-items-center" id="master-div">
+    <h1>Crush City Weather Wants to Know...</h1>
+    <h6>How's the Weather in Your Hood?</h6>
+    <div id="map">
+
+    </div>
+    <div id="options">
+        <input type="radio" id="metric" value="metric" name="measurement-method" checked>Metric
+        <input type="radio" id="imperial" value="imperial" name="measurement-method">US/UK Imperial
+    </div>
+    <div class="container-fluid mt-4"><h4>Five-Day Forecast for This Location:</h4>
+        <div class="row mb-5 border border-danger d-flex justify-content-between" id="forecast-div">
+
+        </div>
+    </div>
+</div>
+
+<!--from here down should be js imports-->
+<!-- jquery usually first always -->
+<script src="https://code.jquery.com/jquery-2.2.4.min.js" integrity="sha256-BbhdlvQf/xTY9gja0Dq3HiwQF8LaCRTXxZKRutelT44=" crossorigin="anonymous"></script>
+<!-- then bootstrap -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-ho+j7jyWK8fNQe+A12Hb8AhRq26LrZ/JpcUGGOn+Y7RsweNrtN/tE3MoK7ZeZDyx" crossorigin="anonymous"></script>
+
+<!-- then other libraries -->
+<script src='https://api.mapbox.com/mapbox-gl-js/v2.7.0/mapbox-gl.js'></script>
+<script src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v4.7.2/mapbox-gl-geocoder.min.js"></script>
+<script src="https://kit.fontawesome.com/99fe95afd3.js" crossorigin="anonymous"></script>
+
+<!-- YOUR STUFF GETS IMPORTED/WRITTEN HERE -->
+<script src="js/keys.js"></script>
+<script src="js/weather-script.js"></script>
+
+<script>
+(function () {
+"use strict";
+    var currentUnits = "metric";
+
+    var MARKER;
+    $(document).ready(function () {
+        loadMap("metric");
+    });
+
+    mapboxgl.accessToken = DBC_MAPBOX_API_KEY;
+    var map = new mapboxgl.Map({
+        container: 'map',
+        style: 'mapbox://styles/mapbox/streets-v9',
+        zoom: 10,
+        center: MY_LNG_LAT_ARRAY,
+    });
+
+    MARKER = new mapboxgl.Marker({
+        draggable: true
+    }).setLngLat(MY_LNG_LAT_ARRAY)
+        .addTo(map);
+    MARKER.on('dragend', endOfMarkerDrag);
+
+    map.addControl(
+        new MapboxGeocoder({
+            accessToken: mapboxgl.accessToken,
+            // localGeocoder: coordinatesGeocoder,
+            zoom: 14,
+            placeholder: 'Enter location name, coordinates, or address',
+            mapboxgl: mapboxgl,
+            marker: false,
+            // reverseGeocode: true
+        })
+    );
+// Calls the function to display a popup with the latitude and longitude of the new location dragged to.
+    function endOfMarkerDrag() {
+        const COORDS = MARKER.getLngLat();
+        // console.log(COORDS);
+        makePopupForCoords(COORDS,currentUnits);
+    }
+
+// Calls the function to display a popup with the latitude and longitude of the new location moved to.
+    function onMoveEnd() {
+        const COORDS = map.getCenter();
+        MARKER.setLngLat(COORDS);
+        makePopupForCoords(COORDS,currentUnits);
+    }
+
+    map.on('moveend', onMoveEnd);
+
+// This function creates a popup for the new location on the map
+// and calls the function to repopulate the weather information for that location below the map.
+    function makePopupForCoords(coordinates,units) {
+        const coordarray = [coordinates.lng, coordinates.lat];
+        var popup = new mapboxgl.Popup({closeOnClick: false})
+            .setLngLat(coordarray)
+            .setHTML(`<p>Latitude:<br/>${coordinates.lat.toFixed(2)}<br/>
+                Longitude:<br/>${coordinates.lng.toFixed(2)}</p>`);
+        MARKER.setPopup(popup);
+        popup.addTo(map);
+
+        doForecastingStuffForCoords(coordarray,units);
+    }
+
+// If the latitude of the location is negative, convert that to degrees south.
+    function changeNegativeLatitude(lat) {
+        if (lat < 0) {
+            return Math.abs(lat) + "º S";
+        }
+        if (lat >= 0 && lat <= 90) {
+            return (lat + "º N");
+        }
+        if (lat > 90) {
+            return "(no such latitude)";
+        }
+    }
+
+// If the longitude of the location is negative, convert that to degrees west.
+    function changeNegativeLongitude(lng) {
+        if (isNaN(lng)) {
+            return "(no such longitude)";
+        }
+        if (lng < 0 && lng >= -180) {
+            return Math.abs(lat) + "º W";
+        }
+        if (lng >= 0 && lng <= 180) {
+            return (lat + "º E");
+        }
+        if (lng > 90) {
+            return "(no such longitude)";
+        }
+    }
+
+// This function reloads the map with the weather information reflecting the unit type selected
+// via the radio buttons (metric or imperial).
+    function loadMap(unitType) {
+        $.get("http://api.openweathermap.org/data/2.5/onecall", {
+            APPID: DBC_OW_API_KEY,
+            lat: MY_LNG_LAT_ARRAY[1],
+            lon: MY_LNG_LAT_ARRAY[0],
+            units: unitType
+        }).done(function (data) {
+            console.log(data);
+            doForecastingStuffForCoords([MY_LNG_LAT_ARRAY[0],MY_LNG_LAT_ARRAY[1]],unitType);
+        });
+    }
+
+// The two event handlers below are for the radio buttons below the map to change the units in the weather info.
+    $('#imperial').click(function (event) {
+        currentUnits = "imperial";
+        makePopupForCoords(map.getCenter(),currentUnits);
+    });
+
+    $('#metric').click(function (event) {
+        currentUnits = "metric";
+        makePopupForCoords(map.getCenter(),currentUnits);
+    });
+
+})();
+</script>
+</body>
+</html>
